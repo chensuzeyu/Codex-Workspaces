@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "namespace": "cws",
+  "state_dir": "~/.local/state/codex-workspaces",
+  "history_limit": 50000,
+  "profiles": {
+    "alice": {
+      "codex_home": "~/.local/share/codex-workspaces/alice/codex",
+      "cwd": "~",
+      "codex_bin": "~/bin/codex",
+      "proxy": {
+        "enabled": true,
+        "mihomo_bin": "~/bin/mihomo",
+        "mixed_port": 18080,
+        "controller_port": 18081
+      },
+      "ssh": {"public_key_file": "~/.ssh/profile-keys/alice.pub"}
+    },
+    "bob": {
+      "codex_home": "~/.local/share/codex-workspaces/bob/codex",
+      "cwd": "~",
+      "codex_bin": "~/bin/codex",
+      "proxy": {
+        "enabled": true,
+        "mihomo_bin": "~/bin/mihomo",
+        "mixed_port": 18082,
+        "controller_port": 18083
+      },
+      "ssh": {"public_key_file": "~/.ssh/profile-keys/bob.pub"}
+    }
+  }
+}

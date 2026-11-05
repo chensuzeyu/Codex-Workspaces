@@ -1,0 +1,4 @@
+The proxy backend is derived from codex-mihomo, licensed under MIT.
+Copyright 2026 the authors of that repository.
+The original MIT permission notice is preserved in LICENSE.
+The multi-profile adapters, lifecycle and SSH integration are part of codex-workspaces.

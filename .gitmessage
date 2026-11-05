@@ -1,0 +1,5 @@
+type: concise change title
+
+- Describe the user-visible behavior.
+- Explain the important implementation boundary.
+- Record meaningful validation.
