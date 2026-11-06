@@ -10,7 +10,7 @@ from .util import public_error
 
 
 def parser():
-    p = argparse.ArgumentParser(prog="codex-workspace", description="Independent Codex accounts, tmux, proxies and SSH on a shared Linux host")
+    p = argparse.ArgumentParser(prog="codex-workspace", description="Independent Codex accounts, background proxies and SSH on a shared Linux host")
     p.add_argument("--version", action="version", version=__version__)
     p.add_argument("--config", type=Path)
     commands = p.add_subparsers(dest="command", required=True)
@@ -34,6 +34,7 @@ def parser():
     cmd.add_argument("provider", nargs="?"); cmd.add_argument("--url-file"); cmd.add_argument("--source-file")
     cmd.add_argument("--download-route", choices=["DIRECT", "BOOTSTRAP"])
     cmd = sub.add_parser("control"); cmd.add_argument("action", choices=["status", "nodes", "pin", "auto", "refresh"]); cmd.add_argument("node", nargs="?")
+    cmd = commands.add_parser("tmux-config", help="Print optional SSH identity and mouse settings")
     cmd = commands.add_parser("scroll"); cmd.add_argument("--socket", required=True); cmd.add_argument("--persist", type=Path)
     cmd = commands.add_parser("ssh"); sub = cmd.add_subparsers(dest="ssh_command", required=True)
     cmd = sub.add_parser("client-config"); cmd.add_argument("profile"); cmd.add_argument("--host", required=True)
@@ -75,7 +76,11 @@ def main(argv=None):
             profiles = list(config.profiles.values()) if args.profile == "all" else [config.get(args.profile)]
             if args.command == "start":
                 for profile in profiles: network.start(config, profile)
-            display({p.name: {"tmux": tmux.status(config, p), "network": network.status(config, p)} for p in profiles}); return 0
+            result = {p.name: network.status(config, p) for p in profiles}
+            display(result); return 0 if all(v["ready"] for v in result.values()) else 1
+        if args.command == "tmux-config":
+            print(tmux.scroll_text(config.history_limit) + 'set -ga update-environment " CWS_SSH_PROFILE"\n', end="")
+            return 0
         if args.command == "scroll":
             tmux.apply_scroll(config, args.socket, args.persist); return 0
         if args.command == "ssh":
@@ -85,12 +90,11 @@ def main(argv=None):
             else:
                 display(ssh.install(config, args.authorized_keys, args.dispatcher, args.apply, args.sshd_bin, args.sshd_config))
             return 0
-        name = os.environ.get("CWS_SSH_PROFILE", "") if args.profile == "@ssh" else args.profile
+        name = environment.ssh_profile(config) if args.profile == "@ssh" else args.profile
         profile = config.get(name)
         if args.command == "run":
             extra = args.args[1:] if args.args[:1] == ["--"] else args.args
-            if "app-server" in extra:
-                network.start(config, profile)
+            network.start(config, profile)
             command = environment.codex_argv(config, profile, extra)
             os.execvpe(command[0], command, environment.build(config, profile))
         elif args.command == "tmux":
@@ -106,7 +110,9 @@ def main(argv=None):
         elif args.command == "network":
             if args.action == "start": network.start(config, profile)
             elif args.action == "stop": network.stop(config, profile)
-            display(network.status(config, profile))
+            result = network.status(config, profile)
+            display(result)
+            if args.action == "status": return 0 if result["ready"] else 1
         elif args.command == "probe":
             if args.transport == "app-server" or args.ssh:
                 from .app_probe import run
@@ -123,7 +129,6 @@ def main(argv=None):
             from .runner import run
             run(config, profile, args.service)
         elif args.command == "_selector":
-            tmux.owned(config, profile)
             from .proxy.selector import run
             run(network.settings(config, profile))
         return 0

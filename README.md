@@ -1,12 +1,12 @@
 # Codex Workspaces
 
-在同一台 Linux 主机上管理多个 Codex CLI 账号。每个 profile 使用独立的 `CODEX_HOME`、tmux 服务、工作目录和可选代理；SSH 客户端也可以按公钥选择 profile。
+在同一台 Linux 主机上管理多个 Codex CLI 账号。每个 profile 使用独立的 `CODEX_HOME`、工作目录和可选后台代理；SSH 客户端也可以按公钥选择 profile。
 
 公开源码不包含实际账号、主机地址、公钥、订阅或运行数据。私有配置和状态放在源码目录之外。使用同一个 Linux 用户时，这是一套使用约定，不是文件权限隔离。
 
 ## 安装和快速开始
 
-需要 Linux、Python 3.11+、tmux、Bash 和已安装的 Codex CLI。代理功能还需要独立安装 Mihomo。客户端可以从 Windows、macOS 或 Linux 使用 SSH 连接。
+需要 Linux、Python 3.11+、Bash 和已安装的 Codex CLI。代理功能还需要独立安装 Mihomo。客户端可以从 Windows、macOS 或 Linux 使用 SSH 连接。
 
 ```bash
 python3 -m venv ~/.venvs/codex-workspaces
@@ -20,14 +20,13 @@ codex-workspace init
 ```bash
 codex-workspace validate
 codex-workspace start alice
-codex-workspace attach alice
-# 进入 tmux 后执行
-codex
+codex-workspace run alice --
+# 安装 SSH dispatcher 后，也可直接执行 codex
 ```
 
-`attach` 会创建或复用当前人的服务和初始 session；重新连接保留已运行的任务和所在目录。`Ctrl+b` 后按 `d` 可分离，重新执行 attach 即可回来。运行 `codex-workspace status all` 查看所有 profile。`cws` 是命令的短别名。
+`start` 只启动个人网络后台，不创建 tmux。普通 CLI 和桌面 App Server 都会自动确保本人的网络服务启动。`status all` 检查后台和网络；`cws` 是短别名。代理未启用时不需要 tmux，也不启动服务。
 
-在各自的窗口里，`codex` 和 `tmux` 包装入口固定对应 profile。Codex 使用文件认证和个人 `CODEX_HOME`，清除继承的认证变量；默认使用 `--no-alt-screen` 以保留终端滚动历史。若安装版本不支持该参数，可在 profile 中设置 `"inline": false`。
+Codex 使用个人 `CODEX_HOME` 和文件认证，清除继承的认证变量。默认使用 `--no-alt-screen`；不支持该参数的 CLI 可设置 `"inline": false`。工作目录不决定账号。
 
 ## 独立代理和自动选点
 
@@ -45,7 +44,7 @@ codex-workspace proxy alice control auto
 
 首次在代理尚未运行时，`provider use` 会验证并准备配置；代理运行后切换会热加载、探测并在失败时恢复。支持 provider 的 `list`、`preview`、`register`、`refresh`、`check`、`use`，以及节点的 `status`、`nodes`、`pin`、`auto`、`refresh`。
 
-每个 profile 的 `net-mihomo` 和 `net-health` 窗口分别运行代理和自动选点。子进程退出后自动重试，日志按大小轮转并保存在私有运行目录。`network stop alice` 只停止本人受管理的网络窗口；保留工作窗口。SSH 断开后 tmux 继续运行，实例重启后重新执行个人入口。
+每个 profile 有两个脱离终端的守护进程，分别运行代理和自动选点。子进程退出后自动重试，日志按大小轮转。`network stop alice` 只停止本配置中本人的已验证守护进程及其子进程，不操作 tmux。并发启动使用独立文件锁；端口被未知进程占用时拒绝接管。SSH 断开或关闭 tmux 不影响服务。未安装开机任务，实例重启后再次运行个人入口即可恢复。守护进程被强制杀死后可能残留子进程，此时应人工检查占用，不能直接接管。
 
 选点读取 Codex 专用健康检查，默认排除香港和订阅提示行，按节点名称筛选，并使用失败率、延迟、冷却和保持期选择出口。10 秒是默认检测周期，不是故障恢复时间保证。节点来源、订阅 URL 和节点凭据均保存在私有运行目录，不应提交到 Git。
 
@@ -66,9 +65,23 @@ codex-workspace ssh client-config alice --host 198.51.100.10 --port 22 --user de
 
 将生成的别名添加到各自电脑的 `~/.ssh/config`，`IdentityFile` 指向与该用户公钥匹配的私钥，然后在客户端 **设置 → 连接 → SSH** 选择自己的别名和远程项目目录。客户端启动自己的 App Server，不需要 attach 到 tmux；不要把 tmux attach 配成 SSH RemoteCommand。
 
-## 滚轮、历史和验证
+## 可选 tmux 与身份传递
 
-新建的 profile 服务默认启用滚轮和 50,000 行历史；在历史查看中按 `q` 退出。现有终端的历史容量不能在线扩大，新窗口使用新容量。历史在 tmux 内存中，服务停止后不作为永久日志保留。现有 Codex 进程的显示模式不会被修改，下次启动时生效。
+普通使用不需要 tmux。习惯 tmux 的用户可在个人 SSH 连接后创建自己的会话。为手动创建的会话安装配置：
+
+```bash
+codex-workspace tmux-config > ~/.config/codex-workspaces/tmux.conf
+# 将下面这行加入 ~/.tmux.conf（不要覆盖已有配置）：
+# source-file ~/.config/codex-workspaces/tmux.conf
+# 已运行的服务也需显式加载：
+tmux source-file ~/.config/codex-workspaces/tmux.conf
+```
+
+配置启用滚轮，并让新建/重新连接会话传递 `CWS_SSH_PROFILE`。已有窗格优先使用继承的 SSH 身份；缺少时，dispatcher 仅查询该窗格所属会话的环境，不读取共享服务器的全局身份，不根据会话名或目录猜账号。旧会话需用自己的 SSH 连接重新 attach 一次；不要加 `-E`。不同账号不要共用一个会话：再次连接可能更新会话环境，这不是永久的创建者绑定，也不是权限隔离。
+
+原 `attach alice`、`tmux alice -- ...` 保留为可选兼容命令，继续使用有所有权标记的个人 socket，账号固定为显式指定的 profile。它们不承载后台网络服务。`scroll` 仍只修改滚轮配置，不修改身份路由。历史只保存在 tmux 内存；服务停止不保留终端历史。
+
+## 验证
 
 ```bash
 # 明确选择旧的 default 服务；可选 --persist ~/.tmux.conf 为以后启动保留设置
@@ -89,6 +102,8 @@ codex-workspace migrate --from /path/to/legacy-workspace \
   --state-dir ~/.local/state/codex-workspaces-imported
 codex-workspace --config ~/.config/codex-workspaces/imported.json validate
 ```
+
+从 0.1 升级时不会自动停止旧 `net-mihomo` / `net-health` 窗口。先用旧版 `network stop <profile>` 停止旧网络，再用新版启动；否则新版会拒绝已占用的端口。不要直接结束有工作任务的 tmux 服务。
 
 迁移只读取旧映射并写私有配置，不接管或停止现有服务。导入的端口可能被旧服务占用：先检查生成配置，选择新的端口或单独计划切换；启动时遇到占用会拒绝接管。运行中的代理配置、凭据、订阅和日志不会进入公开仓库。
 

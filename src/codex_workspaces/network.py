@@ -1,15 +1,13 @@
-"""Per-profile services in owned tmux windows, private logs and status APIs."""
+"""Per-profile detached services, private logs and status APIs."""
 import json
 import os
 from pathlib import Path
 import re
-import shlex
 import subprocess
-import sys
 import time
 import urllib.request
 
-from . import environment, tmux
+from . import services
 from .util import atomic, launcher, listening, lock
 
 
@@ -69,31 +67,15 @@ def preflight(config, profile):
 
 
 def start(config, profile):
-    tmux.start(config, profile)
     if not profile.proxy["enabled"]:
         return
     preflight(config, profile)
     with lock(config.identity + "-network-" + profile.name):
         for service in ("mihomo", "health"):
-            name = "net-" + service
-            rows = [row for row in tmux.windows(config, profile) if row[1] == name]
-            if len(rows) > 1 or (rows and rows[0][3] != config.identity + ":" + profile.name + ":" + service):
-                raise RuntimeError("Refusing to replace an unowned service window")
-            if not rows or rows[0][2] == "1":
-                if service == "mihomo" and any(listening(profile.proxy[key]) for key in ("mixed_port", "controller_port")):
+            if service == "mihomo" and not services.pid(config, profile, service):
+                if any(listening(profile.proxy[key]) for key in ("mixed_port", "controller_port")):
                     raise RuntimeError("Proxy ports already occupied; refusing to take over")
-                path = profile.state / ("run-" + service)
-                atomic(path, launcher(config, ["_service", profile.name, service]), 0o755)
-                shell_command = "exec " + shlex.quote(str(path))
-                if rows:
-                    wid = rows[0][0]
-                    tmux.call(config, profile, "respawn-window", "-t", wid, "-c", str(profile.cwd), shell_command)
-                else:
-                    wid = tmux.call(config, profile, "new-window", "-d", "-P", "-F", "#{window_id}", "-t", "=" + profile.session,
-                                    "-n", name, "-c", str(profile.cwd), shell_command,
-                                    env=environment.build(config, profile)).stdout.strip()
-                    tmux.call(config, profile, "set", "-w", "-t", wid, "@cws-service", config.identity + ":" + profile.name + ":" + service)
-                    tmux.call(config, profile, "set", "-w", "-t", wid, "remain-on-exit", "on")
+            services.start(config, profile, service)
             if service == "mihomo":
                 for _ in range(40):
                     try:
@@ -126,8 +108,8 @@ def status(config, profile):
         result["state_age_seconds"] = round(time.time() - state_file.stat().st_mtime, 1)
         result["eligible_count"] = sum(bool(value.get("ready")) for value in state.get("nodes", {}).values())
         result["mode"] = "pinned-with-failover" if (profile.proxy_home / "selector-pin.json").exists() else "auto"
-        live = tmux.windows(config, profile)
-        services_live = all(any(row[1] == "net-" + service and row[2] == "0" and row[3] == config.identity + ":" + profile.name + ":" + service for row in live) for service in ("mihomo", "health"))
+        result["supervisors"] = {name: services.pid(config, profile, name) for name in ("mihomo", "health")}
+        services_live = all(result["supervisors"].values())
         result["ready"] = (all(result["ports"].values()) and services_live and 0 <= result["state_age_seconds"] < max(30, own.health_interval * 3)
                            and result["eligible_count"] > 0 and result["excluded_candidates"] == 0 and result["outside_include_filter"] == 0 and not result["selected_excluded"])
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
@@ -136,16 +118,7 @@ def status(config, profile):
 
 
 def stop(config, profile):
-    """Stop only tagged service windows. Work panes and other sockets stay alive."""
-    if not tmux.exists(config, profile):
-        return
-    tmux.owned(config, profile)
-    for row in tmux.windows(config, profile):
-        if row[3] in {config.identity + ":" + profile.name + ":" + service for service in ("mihomo", "health")}:
-            tmux.call(config, profile, "kill-window", "-t", row[0])
-    if profile.proxy["enabled"]:
-        for _ in range(24):
-            if not any(listening(profile.proxy[key]) for key in ("mixed_port", "controller_port")):
-                return
-            time.sleep(0.5)
-        raise RuntimeError("Service shutdown is incomplete; inspect the private log")
+    """Stop only this configuration/profile's verified supervisors."""
+    with lock(config.identity + "-network-" + profile.name):
+        for service in ("health", "mihomo"):
+            services.stop(config, profile, service)

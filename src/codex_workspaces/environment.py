@@ -68,3 +68,18 @@ def prepare(config, profile):
           "source " + shlex.quote(str(profile.state / "env.sh")) + "\nhash -r\n"
           + "PS1=" + shlex.quote("[" + profile.name + "] \\u@\\h:\\w\\$ ") + "\n")
     atomic(profile.state / "shellrc.bash", rc)
+
+
+def ssh_profile(config, ambient=None):
+    """Inherited key binding wins; old panes may consult only their session."""
+    import subprocess
+    env = os.environ if ambient is None else ambient
+    name = env.get("CWS_SSH_PROFILE", "")
+    if not name and env.get("TMUX") and env.get("TMUX_PANE"):
+        result = subprocess.run([config.tmux_bin, "show-environment", "-t", env["TMUX_PANE"], "CWS_SSH_PROFILE"],
+                                env=env, capture_output=True, text=True, timeout=5)
+        if result.returncode == 0 and result.stdout.startswith("CWS_SSH_PROFILE="):
+            name = result.stdout.strip().split("=", 1)[1]
+    if name not in config.profiles:
+        raise ValueError("SSH identity is not bound; connect with a registered personal key")
+    return name

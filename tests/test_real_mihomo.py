@@ -13,7 +13,7 @@ import unittest
 
 import yaml
 
-from codex_workspaces import network, tmux
+from codex_workspaces import network, tmux, services
 from codex_workspaces.proxy.provider import write_profile, source_config, save_bytes, dump
 from helpers import PrivateFixture
 
@@ -75,6 +75,7 @@ class RealMihomoIntegrationTests(PrivateFixture):
 
     def tearDown(self):
         for profile in self.config.profiles.values():
+            network.stop(self.config, profile)
             tmux.call(self.config, profile, "kill-server", check=False)
         time.sleep(.3)
         for server in self.servers: server.shutdown(); server.server_close()
@@ -94,7 +95,7 @@ class RealMihomoIntegrationTests(PrivateFixture):
             network.start(self.config, p)
         except RuntimeError as exc:
             logs = list(p.proxy_home.glob('service-*.log'))
-            panes = tmux.windows(self.config, p)
+            panes = []
             details = {str(log.name): log.read_text(errors='replace')[-3000:] for log in logs}
             for row in panes:
                 details[row[1]] = tmux.call(self.config, p, 'capture-pane', '-p', '-t', row[0], '-S', '-20', check=False).stdout
@@ -107,12 +108,13 @@ class RealMihomoIntegrationTests(PrivateFixture):
         self.wait_for(lambda: network.api(p, "/proxies/OUTBOUND")["now"] == "backup")
         self.health["fast"] = True
         # Restart just the child; the tagged runner and work pane must survive.
-        row = next(row for row in tmux.windows(self.config, p) if row[1] == "net-mihomo")
-        runner = row[4]
+        self.assertFalse(tmux.exists(self.config, p))
+        runner = str(services.pid(self.config, p, "mihomo"))
         def children(): return (Path("/proc") / runner / "task" / runner / "children").read_text().split()
         old = children(); self.assertEqual(len(old), 1); os.kill(int(old[0]), signal.SIGTERM)
         self.wait_for(lambda: bool(children()) and children() != old)
         self.wait_for(lambda: network.status(self.config, p)["ready"])
+        tmux.start(self.config, p)
         before = tmux.call(self.config, p, "list-panes", "-t", "=" + p.session + ":0", "-F", "#{pane_pid}").stdout
         network.stop(self.config, p)
         self.wait_for(lambda: not network.status(self.config, p)["ready"])

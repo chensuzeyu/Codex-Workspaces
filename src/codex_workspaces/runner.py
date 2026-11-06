@@ -8,12 +8,11 @@ import subprocess
 import threading
 import time
 
-from . import environment, network, tmux
-from .util import lock, listening, stop_group
+from . import environment, network, services
+from .util import lock, listening, stop_group, json_write
 
 
 def run(config, profile, service):
-    tmux.owned(config, profile)
     if os.environ.get("CWS_PROFILE") != profile.name:
         raise RuntimeError("Service environment identity mismatch")
     with lock(config.identity + "-service-" + profile.name + "-" + service, blocking=False):
@@ -35,8 +34,20 @@ def run(config, profile, service):
         env = environment.build(config, profile)
         for key in environment.PROXIES:
             env.pop(key, None)
+        record = services.record(config, profile, service)
+        token = services.birth(os.getpid())
+        request = record.with_suffix(".stop")
+        request.unlink(missing_ok=True)
+        json_write(record, {"pid": os.getpid(), "birth": token})
+        def requested():
+            try:
+                if request.read_text() == token:
+                    stop()
+            except FileNotFoundError:
+                pass
+            return stopped.is_set()
         try:
-            while not stopped.is_set():
+            while not requested():
                 if service == "mihomo" and any(listening(profile.proxy[key]) for key in ("mixed_port", "controller_port")):
                     raise RuntimeError("Proxy ports occupied; refusing duplicate service")
                 process = subprocess.Popen(network.command(config, profile, service), cwd=profile.cwd, env=env,
@@ -46,8 +57,7 @@ def run(config, profile, service):
                         logger.info(chunk.decode("utf-8", errors="replace").rstrip())
                 reader = threading.Thread(target=consume, args=(process.stdout,), daemon=True)
                 reader.start()
-                print(service + " running; details in private runtime log", flush=True)
-                while process.poll() is None and not stopped.wait(0.3):
+                while process.poll() is None and not stopped.wait(0.3) and not requested():
                     pass
                 stop_group(process)
                 reader.join(timeout=2)
@@ -59,3 +69,5 @@ def run(config, profile, service):
             stop()
             atexit.unregister(stop)
             handler.close()
+            record.unlink(missing_ok=True)
+            request.unlink(missing_ok=True)

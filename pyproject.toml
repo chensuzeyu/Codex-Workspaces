@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codex-workspaces"
-version = "0.1.0"
-description = "Per-account Codex environments, tmux sessions, proxies and SSH entry points on a shared Linux host"
+version = "0.2.0"
+description = "Per-account Codex environments, background proxies and SSH entry points on a shared Linux host"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}

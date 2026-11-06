@@ -67,3 +67,17 @@ class TmuxIntegrationTests(PrivateFixture):
         tmux.call(self.config, p, "copy-mode", "-e", "-t", pane)
         tmux.call(self.config, p, "send-keys", "-X", "-t", pane, "-N", "5", "scroll-up")
         self.assertGreater(int(tmux.call(self.config, p, "display-message", "-p", "-t", pane, "#{scroll_position}").stdout), 0)
+
+    def test_old_pane_ssh_identity_uses_session_not_global(self):
+        p = self.config.get("alice")
+        tmux.start(self.config, p)
+        pane = tmux.call(self.config, p, "list-panes", "-t", "=" + p.session, "-F", "#{pane_id}").stdout.splitlines()[0]
+        socket = tmux.call(self.config, p, "display-message", "-p", "-t", pane, "#{socket_path}").stdout.strip()
+        tmux.call(self.config, p, "set-environment", "-g", "CWS_SSH_PROFILE", "bob")
+        tmux.call(self.config, p, "set-environment", "-t", "=" + p.session, "CWS_SSH_PROFILE", "alice")
+        env = os.environ.copy()
+        env.pop("CWS_SSH_PROFILE", None)
+        env.update(TMUX=socket + ",0,0", TMUX_PANE=pane)
+        self.assertEqual(environment.ssh_profile(self.config, env), "alice")
+        tmux.call(self.config, p, "set-environment", "-r", "-t", "=" + p.session, "CWS_SSH_PROFILE")
+        with self.assertRaises(ValueError): environment.ssh_profile(self.config, env)
