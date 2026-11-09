@@ -23,3 +23,5 @@ SSH 公钥 → CWS_SSH_PROFILE → dispatcher → profile → CODEX_HOME / 文�
 代理和健康守护由 network 启动，runner 负责子进程恢复、清理和日志；services 使用临时运行目录中的 PID 与进程启动时间核对所有权，通过绑定进程启动时间的停止请求触发自行清理退出。网络不依赖 tmux。状态就绪不等于真实模型请求成功。
 
 手动 tmux 仅是可选终端容器。继承身份优先，缺失时读取当前窗格的会话环境，拒绝未知身份。兼容的个人受管理 tmux 继续使用固定 profile；普通共享 tmux 会话不应由不同账号共用。
+
+平台托管公钥覆盖的限制和 `ExposeAuthInfo` 方案的实现边界见 [平台 SSH 身份说明](platform-ssh-identity.md)；当前公开版仍使用 `CWS_SSH_PROFILE` 公钥选项。

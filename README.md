@@ -61,6 +61,8 @@ codex-workspace ssh install --authorized-keys ~/.ssh/authorized_keys --dispatche
 codex-workspace ssh client-config alice --host 198.51.100.10 --port 22 --user developer
 ```
 
+**平台托管公钥注意：** 当前公开版仅实现公钥行的 `environment="CWS_SSH_PROFILE=..."` 方式；平台若重写授权文件，身份绑定会丢失。另有基于 `ExposeAuthInfo` 和 `SSH_USER_AUTH` 的部署思路，但**本开源版尚未实现或自动安装它**。原理、限制和验证边界见 [平台托管公钥说明](docs/platform-ssh-identity.md)。
+
 管理员需事先允许 SSH 接受 `CWS_SSH_PROFILE`；工具不会修改或重启 sshd。确保 dispatcher 所在目录在远程登录 shell 的 `PATH` 中。安装器保留无关公钥，拒绝接管其他项目的 dispatcher，并在私有状态目录保存回滚备份。它不会修改由平台托管的只读公钥来源；平台覆盖授权文件或实例重建后需重新检查和安装。
 
 将生成的别名添加到各自电脑的 `~/.ssh/config`，`IdentityFile` 指向与该用户公钥匹配的私钥，然后在客户端 **设置 → 连接 → SSH** 选择自己的别名和远程项目目录。客户端启动自己的 App Server，不需要 attach 到 tmux；不要把 tmux attach 配成 SSH RemoteCommand。
