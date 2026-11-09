@@ -24,4 +24,6 @@ SSH 公钥 → CWS_SSH_PROFILE → dispatcher → profile → CODEX_HOME / 文�
 
 手动 tmux 仅是可选终端容器。继承身份优先，缺失时读取当前窗格的会话环境，拒绝未知身份。兼容的个人受管理 tmux 继续使用固定 profile；普通共享 tmux 会话不应由不同账号共用。
 
+聊天文件、索引与数据库可位于不同存储；会话文件持久化不意味着索引已持久化或可完整恢复。迁移原则和限制见 [存储说明](storage.md)。
+
 平台托管公钥覆盖的限制和 `ExposeAuthInfo` 方案的实现边界见 [平台 SSH 身份说明](platform-ssh-identity.md)；当前公开版仍使用 `CWS_SSH_PROFILE` 公钥选项。

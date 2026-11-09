@@ -10,6 +10,10 @@ For optional manually created tmux sessions, `cws tmux-config` prints mouse and 
 
 See [Chinese usage guide](README.md) and [architecture](docs/architecture.md). Private configuration, keys, credentials and runtime data stay outside this checkout. Tests never make model requests unless explicitly opted in. MIT licensed.
 
+## Chat files and storage
+
+Session files, history indexes and SQLite databases may reside on different storage. Persistent session files alone do not ensure complete recovery after instance recreation. Verify filesystem semantics and upload completion separately; see [storage guidance](docs/storage.md).
+
 ## Platform-managed SSH keys
 
 The current open-source installer uses per-key `CWS_SSH_PROFILE` options; platform rewrites of `authorized_keys` can remove them. A separate deployment can resolve the authenticated key through OpenSSH `ExposeAuthInfo` / `SSH_USER_AUTH`, but **this package does not implement or install that method**. See [platform SSH identity guidance](docs/platform-ssh-identity.md).
